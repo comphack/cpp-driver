@@ -163,12 +163,10 @@ private:
     char buf_[MAX_BUFFER_SIZE];
   };
 
-  class StartupCallback : public RequestCallback {
+  class StartupCallback : public SimpleRequestCallback {
   public:
-    StartupCallback(Connection* connection, Request* request)
-        : RequestCallback(request) {
-      set_connection(connection);
-    }
+    StartupCallback(Request* request)
+        : SimpleRequestCallback(request) { }
 
     virtual void on_set(ResponseMessage* response);
     virtual void on_error(CassError code, const std::string& message);
@@ -178,9 +176,9 @@ private:
     void on_result_response(ResponseMessage* response);
   };
 
-  class HeartbeatCallback : public RequestCallback {
+  class HeartbeatCallback : public SimpleRequestCallback {
   public:
-    HeartbeatCallback(Connection* connection);
+    HeartbeatCallback();
 
     virtual void on_set(ResponseMessage* response);
     virtual void on_error(CassError code, const std::string& message);

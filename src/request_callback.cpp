@@ -145,7 +145,7 @@ void RequestCallback::set_state(RequestCallback::State next_state) {
 }
 
 uint64_t RequestCallback::request_timeout_ms(const Config& config) const {
-  uint64_t request_timeout_ms = request_->request_timeout_ms();
+  uint64_t request_timeout_ms = request()->request_timeout_ms();
   if (request_timeout_ms == CASS_UINT64_MAX) {
     return config.request_timeout_ms();
   }

@@ -54,7 +54,6 @@ public:
   Future(FutureType type)
       : is_set_(false)
       , type_(type)
-      , loop_(NULL)
       , callback_(NULL) {
     uv_mutex_init(&mutex_);
     uv_cond_init(&cond_);
@@ -98,10 +97,6 @@ public:
     internal_set_error(code, message, lock);
   }
 
-  void set_loop(uv_loop_t* loop) {
-    loop_.store(loop);
-  }
-
   bool set_callback(Callback callback, void* data);
 
 protected:
@@ -130,17 +125,10 @@ protected:
   uv_mutex_t mutex_;
 
 private:
-  void run_callback_on_work_thread();
-  static void on_work(uv_work_t* work);
-  static void on_after_work(uv_work_t* work, int status);
-
-private:
   bool is_set_;
   uv_cond_t cond_;
   FutureType type_;
   ScopedPtr<Error> error_;
-  Atomic<uv_loop_t*> loop_;
-  uv_work_t work_;
   Callback callback_;
   void* data_;
 

@@ -30,7 +30,7 @@
 namespace cass {
 
 class IOWorker;
-class RequestHandler;
+class SpeculativeExecution;
 class Config;
 
 class Pool : public RefCounted<Pool>
@@ -54,10 +54,10 @@ public:
   void delayed_connect();
   void close(bool cancel_reconnect = false);
 
-  bool write(Connection* connection, RequestHandler* request_handler);
+  bool write(Connection* connection, SpeculativeExecution* speculative_execution);
   void flush();
 
-  void wait_for_connection(RequestHandler* request_handler);
+  void wait_for_connection(SpeculativeExecution* speculative_execution);
   Connection* borrow_connection();
 
   const Host::ConstPtr& host() const { return host_; }
@@ -79,8 +79,8 @@ public:
   void return_connection(Connection* connection);
 
 private:
-  void add_pending_request(RequestHandler* request_handler);
-  void remove_pending_request(RequestHandler* request_handler);
+  void add_pending_request(SpeculativeExecution* speculative_execution);
+  void remove_pending_request(SpeculativeExecution* speculative_execution);
   void set_is_available(bool is_available);
 
   void maybe_notify_ready();

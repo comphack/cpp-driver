@@ -32,7 +32,7 @@ class Response;
 class SchemaChangeCallback : public MultipleRequestCallback {
 public:
   SchemaChangeCallback(Connection* connection,
-                      RequestHandler* request_handler,
+                      SpeculativeExecution* speculative_execution,
                       const SharedRefPtr<Response>& response,
                       uint64_t elapsed = 0);
 
@@ -46,7 +46,7 @@ public:
 private:
   bool has_schema_agreement(const ResponseMap& responses);
 
-  ScopedRefPtr<RequestHandler> request_handler_;
+  ScopedRefPtr<SpeculativeExecution> speculative_execution_;
   SharedRefPtr<Response> request_response_;
   uint64_t start_ms_;
   uint64_t elapsed_ms_;

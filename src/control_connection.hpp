@@ -116,7 +116,7 @@ private:
   struct UnusedData {};
 
   template<class T>
-  class ControlCallback : public RequestCallback {
+  class ControlCallback : public SimpleRequestCallback {
   public:
     typedef void (*ResponseCallback)(ControlConnection*, const T&, Response*);
 
@@ -124,7 +124,7 @@ private:
                    ControlConnection* control_connection,
                    ResponseCallback response_callback,
                    const T& data)
-      : RequestCallback(request)
+      : SimpleRequestCallback(request)
       , control_connection_(control_connection)
       , response_callback_(response_callback)
       , data_(data) {}

@@ -139,34 +139,33 @@ bool IOWorker::execute(RequestHandler* request_handler) {
   return request_queue_.enqueue(request_handler);
 }
 
-void IOWorker::retry(RequestHandler* request_handler) {
-  Address address;
-  if (!request_handler->get_current_host_address(&address)) {
-    request_handler->on_error(CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+void IOWorker::retry(SpeculativeExecution* speculative_execution) {
+  if (!speculative_execution->current_host()) {
+    speculative_execution->on_error(CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
                               "All hosts in current policy attempted "
                               "and were either unavailable or failed");
     return;
   }
 
-  PoolMap::const_iterator it = pools_.find(address);
+  PoolMap::const_iterator it = pools_.find(speculative_execution->current_host()->address());
   if (it != pools_.end() && it->second->is_ready()) {
     const SharedRefPtr<Pool>& pool = it->second;
     Connection* connection = pool->borrow_connection();
     if (connection != NULL) {
-      if (!pool->write(connection, request_handler)) {
-        request_handler->next_host();
-        retry(request_handler);
+      if (!pool->write(connection, speculative_execution)) {
+        speculative_execution->next_host();
+        retry(speculative_execution);
       }
     } else { // Too busy, or no connections
-      pool->wait_for_connection(request_handler);
+      pool->wait_for_connection(speculative_execution);
     }
   } else {
-    request_handler->next_host();
-    retry(request_handler);
+    speculative_execution->next_host();
+    retry(speculative_execution);
   }
 }
 
-void IOWorker::request_finished(RequestHandler* request_handler) {
+void IOWorker::request_finished() {
   pending_request_count_--;
   maybe_close();
   request_queue_.send();
@@ -287,7 +286,7 @@ void IOWorker::on_execute(uv_async_t* async) {
     if (request_handler != NULL) {
       io_worker->pending_request_count_++;
       request_handler->set_io_worker(io_worker);
-      request_handler->retry();
+      request_handler->execute();
     } else {
       io_worker->state_ = IO_WORKER_STATE_CLOSING;
     }

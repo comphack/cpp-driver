@@ -33,6 +33,7 @@
 #include "row.hpp"
 #include "scoped_lock.hpp"
 #include "scoped_ptr.hpp"
+#include "speculative_execution.hpp"
 #include "token_map.hpp"
 
 #include <list>
@@ -160,6 +161,7 @@ private:
 #endif
 
   QueryPlan* new_query_plan(const Request* request = NULL, Request::EncodingCache* cache = NULL);
+  SpeculativeExecutionPlan* new_execution_plan(const Request* request);
 
   void on_reconnect(Timer* timer);
 
@@ -191,6 +193,7 @@ private:
   Config config_;
   ScopedPtr<Metrics> metrics_;
   ScopedRefPtr<LoadBalancingPolicy> load_balancing_policy_;
+  ScopedRefPtr<SpeculativeExecutionPolicy> speculative_execution_policy_;
   CassError connect_error_code_;
   std::string connect_error_message_;
   ScopedRefPtr<Future> connect_future_;

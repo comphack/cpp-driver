@@ -39,6 +39,7 @@ namespace cass {
 class Config;
 class Pool;
 class RequestHandler;
+class SpeculativeExecution;
 class Session;
 class SSLContext;
 class Timer;
@@ -104,8 +105,8 @@ public:
 
   bool execute(RequestHandler* request_handler);
 
-  void retry(RequestHandler* request_handler);
-  void request_finished(RequestHandler* request_handler);
+  void retry(SpeculativeExecution* speculative_execution);
+  void request_finished();
 
   void notify_pool_ready(Pool* pool);
   void notify_pool_closed(Pool* pool);

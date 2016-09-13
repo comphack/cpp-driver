@@ -52,13 +52,11 @@ public:
     REQUEST_STATE_DONE
   };
 
-  RequestCallback(const Request* request)
-    : request_(request)
-    , connection_(NULL)
+  RequestCallback()
+    : connection_(NULL)
     , stream_(-1)
     , state_(REQUEST_STATE_NEW)
     , cl_(CASS_CONSISTENCY_UNKNOWN)
-    , timestamp_(CASS_INT64_MIN)
     , start_time_ns_(0) { }
 
   virtual ~RequestCallback() {}
@@ -69,9 +67,11 @@ public:
   virtual void on_error(CassError code, const std::string& message) = 0;
   virtual void on_timeout() = 0;
 
-  virtual void retry() { }
+  virtual const Request* request() const = 0;
+  virtual Request::EncodingCache* encoding_cache() = 0;
 
-  const Request* request() const { return request_.get(); }
+  virtual int64_t timestamp() const { return request()->timestamp(); }
+  virtual void retry() { }
 
   Connection* connection() const { return connection_; }
 
@@ -104,22 +104,11 @@ public:
 
   void set_consistency(CassConsistency cl) { cl_ = cl; }
 
-  int64_t timestamp() const {
-    return timestamp_;
-  }
-
-  void set_timestamp(int64_t timestamp) {
-    timestamp_ = timestamp;
-  }
-
   uint64_t request_timeout_ms(const Config& config) const;
 
   uint64_t start_time_ns() const { return start_time_ns_; }
 
-  Request::EncodingCache* encoding_cache() { return &encoding_cache_; }
-
 protected:
-  ScopedRefPtr<const Request> request_;
   Connection* connection_;
 
 private:
@@ -127,12 +116,25 @@ private:
   int stream_;
   State state_;
   CassConsistency cl_;
-  int64_t timestamp_;
   uint64_t start_time_ns_;
-  Request::EncodingCache encoding_cache_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(RequestCallback);
+};
+
+class SimpleRequestCallback : public RequestCallback {
+public:
+  SimpleRequestCallback(const Request* request)
+    : RequestCallback()
+    , request_(request) { }
+
+  virtual const Request* request() const { return request_.get(); }
+
+  virtual Request::EncodingCache* encoding_cache() { return &encoding_cache_; }
+
+private:
+  ScopedRefPtr<const Request> request_;
+  Request::EncodingCache encoding_cache_;
 };
 
 class MultipleRequestCallback : public RefCounted<MultipleRequestCallback> {
@@ -161,10 +163,10 @@ public:
   }
 
 private:
-  class InternalCallback : public RequestCallback {
+  class InternalCallback : public SimpleRequestCallback {
   public:
     InternalCallback(MultipleRequestCallback* parent, const Request* request, const std::string& index)
-      : RequestCallback(request)
+      : SimpleRequestCallback(request)
       , parent_(parent)
       , index_(index) { }
 

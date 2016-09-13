@@ -34,11 +34,11 @@ static bool least_busy_comp(Connection* a, Connection* b) {
   return a->pending_request_count() < b->pending_request_count();
 }
 
-class SetKeyspaceCallback : public RequestCallback {
+class SetKeyspaceCallback : public SimpleRequestCallback {
 public:
   SetKeyspaceCallback(Connection* connection,
                      const std::string& keyspace,
-                     RequestHandler* request_handler);
+                     SpeculativeExecution* speculative_execution);
 
   virtual void on_set(ResponseMessage* response);
   virtual void on_error(CassError code, const std::string& message);
@@ -48,14 +48,14 @@ private:
   void on_result_response(ResponseMessage* response);
 
 private:
-  ScopedRefPtr<RequestHandler> request_handler_;
+  ScopedRefPtr<SpeculativeExecution> speculative_execution_;
 };
 
 SetKeyspaceCallback::SetKeyspaceCallback(Connection* connection,
                                        const std::string& keyspace,
-                                       RequestHandler* request_handler)
-  : RequestCallback(new QueryRequest("USE \"" + keyspace + "\""))
-  , request_handler_(request_handler) {
+                                       SpeculativeExecution* speculative_execution)
+  : SimpleRequestCallback(new QueryRequest("USE \"" + keyspace + "\""))
+  , speculative_execution_(speculative_execution) {
   set_connection(connection);
 }
 
@@ -66,7 +66,7 @@ void SetKeyspaceCallback::on_set(ResponseMessage* response) {
       break;
     case CQL_OPCODE_ERROR:
       connection_->defunct();
-      request_handler_->on_error(CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE,
+      speculative_execution_->on_error(CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE,
                                  "Unable to set keyspace");
       break;
     default:
@@ -76,26 +76,26 @@ void SetKeyspaceCallback::on_set(ResponseMessage* response) {
 
 void SetKeyspaceCallback::on_error(CassError code, const std::string& message) {
   connection_->defunct();
-  request_handler_->on_error(CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE,
+  speculative_execution_->on_error(CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE,
                              "Unable to set keyspace");
 }
 
 void SetKeyspaceCallback::on_timeout() {
   // TODO(mpenick): What to do here?
-  request_handler_->on_timeout();
+  speculative_execution_->on_timeout();
 }
 
 void SetKeyspaceCallback::on_result_response(ResponseMessage* response) {
   ResultResponse* result =
       static_cast<ResultResponse*>(response->response_body().get());
   if (result->kind() == CASS_RESULT_KIND_SET_KEYSPACE) {
-    if (!connection_->write(request_handler_.get())) {
+    if (!connection_->write(speculative_execution_.get())) {
       // Try on the same host but a different connection
-      request_handler_->retry();
+      speculative_execution_->retry();
     }
   } else {
     connection_->defunct();
-    request_handler_->on_error(CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE,
+    speculative_execution_->on_error(CASS_ERROR_LIB_UNABLE_TO_SET_KEYSPACE,
                                "Unable to set keyspace");
   }
 }
@@ -121,12 +121,12 @@ Pool::~Pool() {
             static_cast<void*>(this),
             static_cast<unsigned int>(pending_requests_.size()));
   while (!pending_requests_.is_empty()) {
-    RequestHandler* request_handler
-        = static_cast<RequestHandler*>(pending_requests_.front());
-    pending_requests_.remove(request_handler);
-    request_handler->stop_timer();
-    request_handler->next_host();
-    request_handler->retry();
+    SpeculativeExecution* speculative_execution
+        = static_cast<SpeculativeExecution*>(pending_requests_.front());
+    pending_requests_.remove(speculative_execution);
+    speculative_execution->stop_timer();
+    speculative_execution->next_host();
+    speculative_execution->retry();
   }
 }
 
@@ -212,18 +212,18 @@ Connection* Pool::borrow_connection() {
 
 void Pool::return_connection(Connection* connection) {
   if (!connection->is_ready() || pending_requests_.is_empty()) return;
-  RequestHandler* request_handler
-      = static_cast<RequestHandler*>(pending_requests_.front());
-  remove_pending_request(request_handler);
-  request_handler->stop_timer();
-  if (!write(connection, request_handler)) {
-    request_handler->next_host();
-    request_handler->retry();
+  SpeculativeExecution* speculative_execution
+      = static_cast<SpeculativeExecution*>(pending_requests_.front());
+  remove_pending_request(speculative_execution);
+  speculative_execution->stop_timer();
+  if (!write(connection, speculative_execution)) {
+    speculative_execution->next_host();
+    speculative_execution->retry();
   }
 }
 
-void Pool::add_pending_request(RequestHandler* request_handler) {
-  pending_requests_.add_to_back(request_handler);
+void Pool::add_pending_request(SpeculativeExecution* speculative_execution) {
+  pending_requests_.add_to_back(speculative_execution);
 
   if (pending_requests_.size() % 10 == 0) {
     LOG_DEBUG("%u request%s pending on %s pool(%p)",
@@ -243,8 +243,8 @@ void Pool::add_pending_request(RequestHandler* request_handler) {
   }
 }
 
-void Pool::remove_pending_request(RequestHandler* request_handler) {
-  pending_requests_.remove(request_handler);
+void Pool::remove_pending_request(SpeculativeExecution* speculative_execution) {
+  pending_requests_.remove(speculative_execution);
   set_is_available(true);
 }
 
@@ -264,10 +264,10 @@ void Pool::set_is_available(bool is_available) {
   }
 }
 
-bool Pool::write(Connection* connection, RequestHandler* request_handler) {
-  request_handler->set_pool(this);
+bool Pool::write(Connection* connection, SpeculativeExecution* speculative_execution) {
+  speculative_execution->set_pool(this);
   if (*io_worker_->keyspace() == connection->keyspace()) {
-    if (!connection->write(request_handler, false)) {
+    if (!connection->write(speculative_execution, false)) {
       return false;
     }
   } else {
@@ -276,7 +276,7 @@ bool Pool::write(Connection* connection, RequestHandler* request_handler) {
               static_cast<void*>(connection),
               static_cast<void*>(this));
     if (!connection->write(new SetKeyspaceCallback(connection, *io_worker_->keyspace(),
-                                                 request_handler), false)) {
+                                                 speculative_execution), false)) {
       return false;
     }
   }
@@ -446,25 +446,25 @@ void Pool::on_availability_change(Connection* connection) {
 }
 
 void Pool::on_pending_request_timeout(Timer* timer) {
-  RequestHandler* request_handler = static_cast<RequestHandler*>(timer->data());
-  Pool* pool = request_handler->pool();
+  SpeculativeExecution* speculative_execution = static_cast<SpeculativeExecution*>(timer->data());
+  Pool* pool = speculative_execution->pool();
   pool->metrics_->pending_request_timeouts.inc();
-  pool->remove_pending_request(request_handler);
-  request_handler->next_host();
-  request_handler->retry();
+  pool->remove_pending_request(speculative_execution);
+  speculative_execution->next_host();
+  speculative_execution->retry();
   LOG_DEBUG("Timeout waiting for connection to %s pool(%p)",
             pool->host_->address_string().c_str(),
             static_cast<void*>(pool));
   pool->maybe_close();
 }
 
-void Pool::wait_for_connection(RequestHandler* request_handler) {
-  request_handler->set_pool(this);
-  request_handler->start_timer(loop_,
+void Pool::wait_for_connection(SpeculativeExecution* speculative_execution) {
+  speculative_execution->set_pool(this);
+  speculative_execution->start_timer(loop_,
                                config_.connect_timeout_ms(),
-                               request_handler,
+                               speculative_execution,
                                Pool::on_pending_request_timeout);
-  add_pending_request(request_handler);
+  add_pending_request(speculative_execution);
 }
 
 void Pool::on_partial_reconnect(Timer* timer) {

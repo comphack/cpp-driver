@@ -105,13 +105,13 @@ void Connection::StartupCallback::on_set(ResponseMessage* response) {
 
     case CQL_OPCODE_AUTH_CHALLENGE:
       connection_->on_auth_challenge(
-            static_cast<const AuthResponseRequest*>(request_.get()),
+            static_cast<const AuthResponseRequest*>(request()),
             static_cast<AuthChallengeResponse*>(response->response_body().get())->token());
       break;
 
     case CQL_OPCODE_AUTH_SUCCESS:
       connection_->on_auth_success(
-            static_cast<const AuthResponseRequest*>(request_.get()),
+            static_cast<const AuthResponseRequest*>(request()),
             static_cast<AuthSuccessResponse*>(response->response_body().get())->token());
       break;
 
@@ -156,10 +156,8 @@ void Connection::StartupCallback::on_result_response(ResponseMessage* response) 
   }
 }
 
-Connection::HeartbeatCallback::HeartbeatCallback(Connection* connection)
-  : RequestCallback(new OptionsRequest()) {
-  set_connection(connection);
-}
+Connection::HeartbeatCallback::HeartbeatCallback()
+  : SimpleRequestCallback(new OptionsRequest()) { }
 
 void Connection::HeartbeatCallback::on_set(ResponseMessage* response) {
   LOG_TRACE("Heartbeat completed on host %s",
@@ -741,7 +739,7 @@ void Connection::on_timeout(Timer* timer) {
 }
 
 void Connection::on_connected() {
-  internal_write(new StartupCallback(this, new OptionsRequest()));
+  internal_write(new StartupCallback(new OptionsRequest()));
 }
 
 void Connection::on_authenticate(const std::string& class_name) {
@@ -761,7 +759,7 @@ void Connection::on_auth_challenge(const AuthResponseRequest* request,
   }
   AuthResponseRequest* auth_response = new AuthResponseRequest(response,
                                                                request->auth());
-  internal_write(new StartupCallback(this, auth_response));
+  internal_write(new StartupCallback(auth_response));
 }
 
 void Connection::on_auth_success(const AuthResponseRequest* request,
@@ -776,14 +774,14 @@ void Connection::on_auth_success(const AuthResponseRequest* request,
 void Connection::on_ready() {
   if (state_ == CONNECTION_STATE_CONNECTED && listener_->event_types() != 0) {
     set_state(CONNECTION_STATE_REGISTERING_EVENTS);
-    internal_write(new StartupCallback(this, new RegisterRequest(listener_->event_types())));
+    internal_write(new StartupCallback(new RegisterRequest(listener_->event_types())));
     return;
   }
 
   if (keyspace_.empty()) {
     notify_ready();
   } else {
-    internal_write(new StartupCallback(this, new QueryRequest("USE \"" + keyspace_ + "\"")));
+    internal_write(new StartupCallback(new QueryRequest("USE \"" + keyspace_ + "\"")));
   }
 }
 
@@ -798,7 +796,7 @@ void Connection::on_supported(ResponseMessage* response) {
   // TODO(mstump) do something with the supported info
   (void)supported;
 
-  internal_write(new StartupCallback(this, new StartupRequest()));
+  internal_write(new StartupCallback(new StartupRequest()));
 }
 
 void Connection::on_pending_schema_agreement(Timer* timer) {
@@ -865,7 +863,7 @@ void Connection::send_credentials(const std::string& class_name) {
   if (v1_auth) {
     V1Authenticator::Credentials credentials;
     v1_auth->get_credentials(&credentials);
-    internal_write(new StartupCallback(this, new CredentialsRequest(credentials)));
+    internal_write(new StartupCallback(new CredentialsRequest(credentials)));
   } else {
     send_initial_auth_response(class_name);
   }
@@ -882,7 +880,7 @@ void Connection::send_initial_auth_response(const std::string& class_name) {
       return;
     }
     AuthResponseRequest* auth_response = new AuthResponseRequest(response, auth);
-    internal_write(new StartupCallback(this, auth_response));
+    internal_write(new StartupCallback(auth_response));
   }
 }
 
@@ -898,7 +896,7 @@ void Connection::on_heartbeat(Timer* timer) {
   Connection* connection = static_cast<Connection*>(timer->data());
 
   if (!connection->heartbeat_outstanding_) {
-    if (!connection->internal_write(new HeartbeatCallback(connection))) {
+    if (!connection->internal_write(new HeartbeatCallback())) {
       // Recycling only this connection with a timeout error. This is unlikely and
       // it means the connection ran out of stream IDs as a result of requests
       // that never returned and as a result timed out.

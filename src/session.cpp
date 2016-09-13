@@ -521,11 +521,11 @@ void Session::on_resolve_done(MultiResolver<Session*>* resolver) {
 
 void Session::execute(RequestHandler* request_handler) {
   if (state_.load(MEMORY_ORDER_ACQUIRE) != SESSION_STATE_CONNECTED) {
-    request_handler->on_error(CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                              "Session is not connected");
+    request_handler->set_error(CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                               "Session is not connected");
   } else if (!request_queue_->enqueue(request_handler)) {
-    request_handler->on_error(CASS_ERROR_LIB_REQUEST_QUEUE_FULL,
-                              "The request queue has reached capacity");
+    request_handler->set_error(CASS_ERROR_LIB_REQUEST_QUEUE_FULL,
+                               "The request queue has reached capacity");
   }
 }
 
@@ -700,6 +700,7 @@ void Session::on_execute(uv_async_t* data) {
     if (request_handler != NULL) {
       request_handler->set_query_plan(session->new_query_plan(request_handler->request(),
                                                               request_handler->encoding_cache()));
+      request_handler->set_execution_plan(session->new_execution_plan(request_handler->request()));
 
       if (request_handler->timestamp() == CASS_INT64_MIN) {
         request_handler->set_timestamp(session->config_.timestamp_gen()->next());
@@ -708,18 +709,16 @@ void Session::on_execute(uv_async_t* data) {
       bool is_done = false;
       while (!is_done) {
         request_handler->next_host();
-
-        Address address;
-        if (!request_handler->get_current_host_address(&address)) {
-          request_handler->on_error(CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
-                                    "All connections on all I/O threads are busy");
+        if (!request_handler->current_host()) {
+          request_handler->set_error(CASS_ERROR_LIB_NO_HOSTS_AVAILABLE,
+                                     "All connections on all I/O threads are busy");
           break;
         }
 
         size_t start = session->current_io_worker_;
         for (size_t i = 0, size = session->io_workers_.size(); i < size; ++i) {
           const SharedRefPtr<IOWorker>& io_worker = session->io_workers_[start % size];
-          if (io_worker->is_host_available(address) &&
+          if (io_worker->is_host_available(request_handler->current_host()->address()) &&
               io_worker->execute(request_handler)) {
             session->current_io_worker_ = (start + 1) % size;
             is_done = true;
@@ -746,6 +745,11 @@ void Session::on_execute(uv_async_t* data) {
 QueryPlan* Session::new_query_plan(const Request* request, Request::EncodingCache* cache) {
   const CopyOnWritePtr<std::string> keyspace(keyspace_);
   return load_balancing_policy_->new_query_plan(*keyspace, request, token_map_.get(), cache);
+}
+
+SpeculativeExecutionPlan* Session::new_execution_plan(const Request* request) {
+  const CopyOnWritePtr<std::string> keyspace(keyspace_);
+  return speculative_execution_policy_->new_plan(*keyspace, request);
 }
 
 } // namespace cass
