@@ -10,6 +10,14 @@ set(PROJECT_LIB_NAME_STATIC "${PROJECT_LIB_NAME}_static")
 # Title the project and define the versioning
 project(${PROJECT_NAME_STR} C CXX)
 
+if( "${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC" )
+  set( CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd" )
+  set( CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd" )
+
+  set( CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT" )
+  set( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT" )
+endif( "${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC" )
+
 include(CppDriver)
 
 CassPolicies()
