@@ -70,10 +70,26 @@ macro(CassUseLibuv)
     NAMES uv.h
     HINTS ${_LIBUV_INCLUDEDIR} ${_LIBUV_ROOT_HINTS_AND_PATHS}
     PATH_SUFFIXES include)
-  find_library(LIBUV_LIBRARY
+  find_library(LIBUV_LIB
     NAMES uv libuv
     HINTS ${_LIBUV_LIBDIR} ${_LIBUV_ROOT_HINTS_AND_PATHS}
     PATH_SUFFIXES lib)
+
+  find_library(LIBUV_LIB_DBG
+    NAMES uvd libuvd
+    HINTS ${_LIBUV_LIBDIR} ${_LIBUV_ROOT_HINTS_AND_PATHS}
+    PATH_SUFFIXES lib)
+
+  if(DEFINED LIBUV_LIB)
+    if(DEFINED LIBUV_LIB_DBG)
+      set(LIBUV_LIBRARIES optimized "${LIBUV_LIB}" debug "${LIBUV_LIB_DBG}")
+    else()
+      set(LIBUV_LIBRARIES optimized "${LIBUV_LIB}")
+    endif()
+  elseif(DEFINED LIBUV_LIB_DBG)
+    set(LIBUV_LIBRARIES debug "${LIBUV_LIB_DBG}")
+  endif()
+
   find_package_handle_standard_args(Libuv "Could NOT find libuv, try to set the path to the libuv root folder in the system variable LIBUV_ROOT_DIR"
     LIBUV_LIBRARY
     LIBUV_INCLUDE_DIR)
