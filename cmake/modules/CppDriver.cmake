@@ -82,11 +82,14 @@ macro(CassUseLibuv)
 
   if(DEFINED LIBUV_LIB)
     if(DEFINED LIBUV_LIB_DBG)
+      set(LIBUV_LIBRARY "${LIBUV_LIB}" "${LIBUV_LIB_DBG}")
       set(LIBUV_LIBRARIES optimized "${LIBUV_LIB}" debug "${LIBUV_LIB_DBG}")
     else()
+      set(LIBUV_LIBRARY "${LIBUV_LIB}")
       set(LIBUV_LIBRARIES optimized "${LIBUV_LIB}")
     endif()
   elseif(DEFINED LIBUV_LIB_DBG)
+    set(LIBUV_LIBRARY "${LIBUV_LIB_DBG}")
     set(LIBUV_LIBRARIES debug "${LIBUV_LIB_DBG}")
   endif()
 
@@ -96,7 +99,7 @@ macro(CassUseLibuv)
 
   # Assign libuv include and libraries
   set(CASS_INCLUDES ${CASS_INCLUDES} ${LIBUV_INCLUDE_DIR})
-  set(CASS_LIBS ${CASS_LIBS} ${LIBUV_LIBRARY})
+  set(CASS_LIBS ${CASS_LIBS} ${LIBUV_LIBRARIES})
 endmacro()
 
 #------------------------
